@@ -15052,6 +15052,8 @@ _DISPATCH: dict[str, Any] = {
     ".inc": extract_pascal,
     ".dfm": extract_delphi_form,
     ".lfm": extract_lazarus_form,
+    ".lkml": extract_lookml,
+    ".lookml": extract_lookml,
     ".lpk": extract_lazarus_package,
     ".sh": extract_bash,
     ".bash": extract_bash,
