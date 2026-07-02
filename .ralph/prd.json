@@ -26,7 +26,7 @@
         "`uv run pytest tests/test_languages.py -k lookml -q` fails with ImportError: cannot import name 'extract_lookml' - this confirms the tests actually exercise not-yet-written code, not a false pass."
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -39,7 +39,7 @@
         "Commit: feat(lookml): view extraction (dimensions, measures, extends, derived_table, sets)"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
