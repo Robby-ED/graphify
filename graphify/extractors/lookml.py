@@ -203,7 +203,9 @@ def extract_lookml(path: Path) -> dict:
 
             explore_name = _first_str(el.get("explore")) or _first_str(el.get("explores"))
             if explore_name:
-                add_edge(el_nid, _explore_id(explore_name), "uses")
+                explore_nid = _explore_id(explore_name)
+                add_node(explore_nid, f"explore: {explore_name}")
+                add_edge(el_nid, explore_nid, "uses")
 
             for fname in el.get("fields", []) or []:
                 if "." in fname:

@@ -2777,6 +2777,24 @@ def test_lookml_dashboard_brace_format_with_sort_direction():
     assert len(_edges_with_relation(r, "uses")) >= 1
 
 
+@_needs_lkml
+def test_lookml_legacy_yaml_dashboard_extraction():
+    r = extract_lookml(FIXTURES / "sample_legacy.dashboard.lookml")
+    labels = _labels(r)
+    assert "dashboard: orders_overview_legacy" in labels
+
+
+@_needs_lkml
+def test_lookml_no_dangling_edges():
+    for fixture in ("sample.view.lkml", "sample.model.lkml",
+                    "sample.dashboard.lookml", "sample_legacy.dashboard.lookml"):
+        r = extract_lookml(FIXTURES / fixture)
+        node_ids = {n["id"] for n in r["nodes"]}
+        for e in r["edges"]:
+            assert e["source"] in node_ids, f"dangling source in {fixture}: {e}"
+            assert e["target"] in node_ids, f"dangling target in {fixture}: {e}"
+
+
 # -- SystemVerilog -------------------------------------------------------------
 
 def test_systemverilog_no_error():
