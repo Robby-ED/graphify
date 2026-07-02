@@ -82,7 +82,7 @@
         "Commit: test(lookml): dual-format dashboard extraction (brace + legacy YAML)"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -97,7 +97,7 @@
         "Commit: feat(lookml): wire extractor into dispatch, detection, and optional extras"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -112,7 +112,7 @@
         "Do NOT run gh pr create - write a draft PR title and body into progress.txt for the human to use, and stop there. Opening the actual PR is a human step."
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]
