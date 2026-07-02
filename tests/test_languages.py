@@ -2753,6 +2753,23 @@ def test_lookml_missing_file_returns_empty():
     assert r["edges"] == []
 
 
+@_needs_lkml
+def test_lookml_explore_defaults_to_own_view():
+    r = extract_lookml(FIXTURES / "sample.model.lkml")
+    node_by_id = {n["id"]: n["label"] for n in r["nodes"]}
+    from_edges = [e for e in _edges_with_relation(r, "from")
+                  if node_by_id[e["source"]] == "explore: orders"]
+    assert from_edges and node_by_id[from_edges[0]["target"]] == "orders"
+    assert from_edges[0]["confidence"] == "INFERRED"
+
+
+@_needs_lkml
+def test_lookml_explore_join_extraction():
+    r = extract_lookml(FIXTURES / "sample.model.lkml")
+    assert "joins" in _relations(r)
+    assert "customers" in _labels(r)
+
+
 # -- SystemVerilog -------------------------------------------------------------
 
 def test_systemverilog_no_error():
