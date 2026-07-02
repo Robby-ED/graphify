@@ -1,0 +1,119 @@
+{
+  "project": "graphify (personal fork of safishamsi/graphify)",
+  "branchName": "feat/lookml-extractor",
+  "description": "Add a LookML extractor (.view.lkml/.model.lkml/.dashboard.lookml) to graphify, following the existing per-language extractor pattern. Full implementation spec, verified against real production LookML in a prior session, lives in .ralph/SPEC.md - read it before starting any story. Scope for this prd.json is Phase 1 only (the LookML extractor); a separate dbt-manifest-lineage extractor and cross-repo work are tracked elsewhere and are explicitly NOT part of this run.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Confirm dev environment is ready",
+      "description": "As a developer, I want the fork's dev environment fully set up, so later stories can run tests immediately. The fork, clone, and v8 checkout are already done (bootstrap step, prior to this loop run) - this story only needs to confirm the branch and environment.",
+      "acceptanceCriteria": [
+        "Confirm you are on branch feat/lookml-extractor (create it from v8 if it does not exist yet: git checkout -b feat/lookml-extractor).",
+        "`uv sync --all-extras` succeeds.",
+        "`uv run graphify --version` prints a version with no errors."
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "View extraction - failing tests + fixture (TDD red)",
+      "description": "As a developer, I want fixture-based tests for view/dimension/measure/derived_table/extends/set extraction written before any implementation, so the extractor's behavior is pinned down by TDD. Full fixture content and test code are in .ralph/SPEC.md under 'Test fixtures' and 'Tests'.",
+      "acceptanceCriteria": [
+        "Create tests/fixtures/sample.view.lkml exactly as specified in .ralph/SPEC.md.",
+        "Add the 7 lookml view-related tests from .ralph/SPEC.md to tests/test_languages.py (test_lookml_view_and_table_extraction, test_lookml_dimension_and_measure_extraction, test_lookml_measure_references_other_measures, test_lookml_measure_filter_edge, test_lookml_extends_edge, test_lookml_derived_table_excludes_cte_includes_real_table, test_lookml_set_extraction), plus test_lookml_missing_file_returns_empty.",
+        "`uv run pytest tests/test_languages.py -k lookml -q` fails with ImportError: cannot import name 'extract_lookml' - this confirms the tests actually exercise not-yet-written code, not a false pass."
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "View extraction - implementation (TDD green)",
+      "description": "As a developer, I want graphify/extractors/lookml.py implementing view-level extraction exactly as specified, so US-002's tests pass.",
+      "acceptanceCriteria": [
+        "Create graphify/extractors/lookml.py with the full extract_lookml implementation from .ralph/SPEC.md, verbatim - it encodes verified design decisions (bare-name ID scoping, CTE-exclusion regex, sort-direction workaround) from prior testing against real files. Do not redesign.",
+        "`uv run pytest tests/test_languages.py -k lookml -q` passes, 0 failures.",
+        "Commit: feat(lookml): view extraction (dimensions, measures, extends, derived_table, sets)"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Explore/join extraction",
+      "description": "As a developer, I want .model.lkml explore and join parsing, including the implicit-self-view-default behavior, so model-level structure is captured.",
+      "acceptanceCriteria": [
+        "Create tests/fixtures/sample.model.lkml exactly as specified in .ralph/SPEC.md.",
+        "Add test_lookml_explore_defaults_to_own_view and test_lookml_explore_join_extraction from .ralph/SPEC.md to tests/test_languages.py.",
+        "The handle_explore logic is already part of the US-003 implementation - if tests fail, check .ralph/SPEC.md's exact code was used verbatim, do not reimplement independently.",
+        "`uv run pytest tests/test_languages.py -k lookml -q` passes.",
+        "Commit: test(lookml): explore/join extraction, including implicit-self-view default"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Dashboard extraction - brace (dashboards-next) format",
+      "description": "As a developer, I want brace-syntax dashboard parsing, including the sort-direction-stripping workaround for a confirmed lkml parser gap, so newer-format dashboards extract correctly.",
+      "acceptanceCriteria": [
+        "Create tests/fixtures/sample.dashboard.lookml exactly as specified in .ralph/SPEC.md (includes `sorts: [... desc]` deliberately).",
+        "Add test_lookml_dashboard_brace_format_with_sort_direction from .ralph/SPEC.md.",
+        "Test passes using the already-implemented _strip_sort_directions + handle_dashboard brace path from US-003.",
+        "Commit."
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Dashboard extraction - legacy YAML format",
+      "description": "As a developer, I want the PyYAML fallback path, so real dashboards like production's ops_funnel.dashboard.lookml (legacy format, confirmed in a prior session) extract correctly.",
+      "acceptanceCriteria": [
+        "Create tests/fixtures/sample_legacy.dashboard.lookml exactly as specified in .ralph/SPEC.md.",
+        "Add test_lookml_legacy_yaml_dashboard_extraction and test_lookml_no_dangling_edges (covering all 4 fixtures) from .ralph/SPEC.md.",
+        "Tests pass using the already-implemented YAML-fallback branch from US-003.",
+        "Commit: test(lookml): dual-format dashboard extraction (brace + legacy YAML)"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Wire dispatch",
+      "description": "As a developer, I want the LookML extractor registered in graphify's dispatch/detection system, so /graphify . picks up .lkml/.lookml files automatically. Exact diffs are in .ralph/SPEC.md under 'Wiring'.",
+      "acceptanceCriteria": [
+        "Update graphify/extractors/__init__.py, graphify/extract.py (facade import + _DISPATCH entries), graphify/detect.py (CODE_EXTENSIONS), and pyproject.toml (lookml optional extra) exactly per .ralph/SPEC.md's Wiring section.",
+        "Do NOT touch graphify/watch.py - confirmed unnecessary, see SPEC.md.",
+        "If this conflicts with lines already changed by a different concurrent change, STOP and write the conflict into this story's notes rather than force-resolving - do not guess at merge resolution in a shared file destined for an upstream PR.",
+        "`uv sync --all-extras && uv run pytest tests/test_languages.py -k lookml -q` passes.",
+        "Commit: feat(lookml): wire extractor into dispatch, detection, and optional extras"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Full verification + real-file smoke test + ready-for-PR",
+      "description": "As a developer, I want the full suite green and a smoke test against real production LookML before calling this done.",
+      "acceptanceCriteria": [
+        "`uv run pytest tests/ -q` passes with 0 failures. STOP condition: if any failure is outside the new lookml tests, do NOT modify pre-existing tests to force a pass - write it into this story's notes and stop instead.",
+        "`uv run ruff check graphify/ tests/` is clean.",
+        "Run the real-file smoke test described in .ralph/SPEC.md's final section against the 4 listed files in ~/edna-looker-talent-acquisition (read-only access to that repo only - never write/modify anything there) - confirm no error key and nonzero nodes/edges on all 4.",
+        "`git push -u origin feat/lookml-extractor` (push to origin/feat/lookml-extractor only - never push v8/master, never push to upstream).",
+        "Do NOT run gh pr create - write a draft PR title and body into progress.txt for the human to use, and stop there. Opening the actual PR is a human step."
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
