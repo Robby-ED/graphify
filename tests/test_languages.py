@@ -2770,6 +2770,13 @@ def test_lookml_explore_join_extraction():
     assert "customers" in _labels(r)
 
 
+@_needs_lkml
+def test_lookml_dashboard_brace_format_with_sort_direction():
+    r = extract_lookml(FIXTURES / "sample.dashboard.lookml")
+    assert "dashboard: orders_overview" in _labels(r)
+    assert len(_edges_with_relation(r, "uses")) >= 1
+
+
 # -- SystemVerilog -------------------------------------------------------------
 
 def test_systemverilog_no_error():

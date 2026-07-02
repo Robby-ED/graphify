@@ -54,7 +54,7 @@
         "Commit: test(lookml): explore/join extraction, including implicit-self-view default"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -68,7 +68,7 @@
         "Commit."
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
