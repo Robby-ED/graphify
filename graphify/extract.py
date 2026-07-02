@@ -14,6 +14,7 @@ from typing import Any, Callable
 from .cache import load_cached, save_cached
 from .mcp_ingest import extract_mcp_config, is_mcp_config_path
 from .manifest_ingest import extract_package_manifest, is_package_manifest_path
+from .dbt_manifest_ingest import extract_dbt_manifest, is_dbt_manifest_path  # noqa: F401
 from .resolver_registry import (
     LanguageResolver,
     register as register_language_resolver,
