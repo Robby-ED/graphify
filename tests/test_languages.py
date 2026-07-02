@@ -9,7 +9,7 @@ from graphify.extract import (
     extract_groovy, extract_sln, extract_csproj, extract_xaml, extract_razor,
     extract_dm, extract_dmi, extract_dmm, extract_dmf,
     extract_powershell, extract_apex, extract_verilog,
-    extract_powershell_manifest,
+    extract_powershell_manifest, extract_lookml,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -2683,6 +2683,74 @@ def test_apex_no_dangling_edges():
         for e in r["edges"]:
             assert e["source"] in node_ids, f"dangling source in {fixture}: {e}"
             assert e["target"] in node_ids, f"dangling target in {fixture}: {e}"
+
+
+# ── LookML (.view.lkml / .model.lkml / .dashboard.lookml) ────────────────────
+
+_needs_lkml = pytest.mark.skipif(
+    _ilu.find_spec("lkml") is None,
+    reason="lkml not installed (optional [lookml] extra)",
+)
+
+
+@_needs_lkml
+def test_lookml_view_and_table_extraction():
+    r = extract_lookml(FIXTURES / "sample.view.lkml")
+    labels = _labels(r)
+    assert "orders" in labels
+    assert "orders_summary" in labels
+
+
+@_needs_lkml
+def test_lookml_dimension_and_measure_extraction():
+    r = extract_lookml(FIXTURES / "sample.view.lkml")
+    labels = _labels(r)
+    assert "orders.status" in labels
+    assert "orders.completed_count" in labels
+
+
+@_needs_lkml
+def test_lookml_measure_references_other_measures():
+    r = extract_lookml(FIXTURES / "sample.view.lkml")
+    refs = _references(r)
+    assert any(s == "orders.completion_rate" and t == "orders.completed_count" for s, t, _ in refs)
+    assert any(s == "orders.completion_rate" and t == "orders.count" for s, t, _ in refs)
+
+
+@_needs_lkml
+def test_lookml_measure_filter_edge():
+    r = extract_lookml(FIXTURES / "sample.view.lkml")
+    node_by_id = {n["id"]: n["label"] for n in r["nodes"]}
+    filt_edges = _edges_with_relation(r, "filters_on")
+    assert any(node_by_id[e["source"]] == "orders.completed_count"
+               and node_by_id[e["target"]] == "orders.status" for e in filt_edges)
+
+
+@_needs_lkml
+def test_lookml_extends_edge():
+    r = extract_lookml(FIXTURES / "sample.view.lkml")
+    assert "extends" in _relations(r)
+
+
+@_needs_lkml
+def test_lookml_derived_table_excludes_cte_includes_real_table():
+    r = extract_lookml(FIXTURES / "sample.view.lkml")
+    labels = _labels(r)
+    assert "customers" in labels
+    assert "recent" not in labels
+
+
+@_needs_lkml
+def test_lookml_set_extraction():
+    r = extract_lookml(FIXTURES / "sample.view.lkml")
+    assert "orders.detail (set)" in _labels(r)
+
+
+@_needs_lkml
+def test_lookml_missing_file_returns_empty():
+    r = extract_lookml(Path("nonexistent.view.lkml"))
+    assert r["nodes"] == []
+    assert r["edges"] == []
 
 
 # -- SystemVerilog -------------------------------------------------------------
