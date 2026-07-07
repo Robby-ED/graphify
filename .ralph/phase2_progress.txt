@@ -1,0 +1,131 @@
+## Codebase Patterns
+
+- Content-sniffed ingestors (mcp_ingest, manifest_ingest, dbt_manifest_ingest) live as
+  top-level `graphify/*.py` siblings, NOT under `graphify/extractors/` — that directory is
+  for suffix-dispatched per-language extractors only (see `graphify/extractors/MIGRATION.md`).
+- Dispatch precedence in `_get_extractor` (graphify/extract.py): filename/content-sniffed
+  checks (blade, mcp config, dbt manifest, package manifest, ObjC/C++ header sniffing) all
+  run BEFORE the generic `_DISPATCH.get(path.suffix)` fallback. Order among the sniffed
+  checks only matters where a real collision risk exists; document why when there isn't one.
+- Cross-extractor node-ID collapsing (for `graphify merge-graphs`) is achieved purely by
+  using `make_id(bare_name)` — no special-cased edge type needed. lookml.py's
+  `sql_table_name` table nodes and dbt_manifest_ingest.py's model/source nodes both use this,
+  so a LookML view's backing table and a same-named dbt model resolve to one graph node.
+- Baseline full suite before this phase: 2788 passed, 3 skipped, 0 failed, ~85s.
+- `uv run` on this project silently bumps `uv.lock`'s own package version line
+  (graphifyy 0.9.x) as a side effect — this is unrelated to any code change; do not stage it
+  into a feature commit unless intentionally bumping the version.
+
+---
+
+## 2026-07-02T15:34:00Z - US-009, US-010, US-011 (done in one continuous local session, not via ralph-loop/cursor-agent)
+
+- What was implemented: dbt `target/manifest.json` lineage extractor. Reads dbt's
+  already-resolved `depends_on.nodes` per model/seed/snapshot/source instead of trying to
+  parse Jinja-templated `.sql` (verified in Phase-2 scoping that `extract_sql` produces 1
+  node / 0 edges on real dbt model files — Jinja isn't valid SQL). Content-sniffs the first
+  4KB for `dbt_schema_version` so it never misfires on the unrelated PWA-manifest.json
+  format. Nodes keyed by bare name via `make_id(name)`, matching `lookml.py`'s convention,
+  so cross-repo `merge-graphs` collapses a dbt model and a same-named LookML backing table
+  into one node. Excludes `test`/`analysis` resource types (assertions, not lineage).
+- Files changed:
+  - `graphify/dbt_manifest_ingest.py` (new) — `is_dbt_manifest_path`, `extract_dbt_manifest`
+  - `graphify/extract.py` — facade re-export (commit f172c89) + dispatch precedence in
+    `_get_extractor`, ahead of `is_package_manifest_path` (commit 2626d5f)
+  - `tests/test_dbt_manifest.py` (new) — 6 tests: content-sniff routing (incl. PWA-manifest
+    negative case), model/source node presence, `depends_on` edge direction, test/analysis
+    exclusion, missing-file empty-result, no-dangling-edges invariant
+- Verification:
+  - TDD red confirmed first: `uv run pytest tests/test_dbt_manifest.py -q` failed with
+    `ImportError: cannot import name 'extract_dbt_manifest'` before any implementation existed.
+  - TDD green: same command, 6 passed, after implementation + facade re-export.
+  - `uv run ruff check graphify/dbt_manifest_ingest.py graphify/extract.py` — clean.
+  - Full suite after dispatch wiring: `uv run pytest tests/ -q` → 2794 passed, 3 skipped,
+    0 failed (net +6 vs. the 2788/3/0 baseline — exactly the new test file, no regressions).
+  - `uv run ruff check graphify/ tests/` — clean.
+  - Real-manifest smoke test (read-only) against
+    `~/Documents/GitHub/edna-dbt-talent-acquisition/target/manifest.json`:
+    - `is_dbt_manifest_path` → True, no `error` key in extraction result
+    - Raw manifest `nodes` dict: 1630 entries. Extracted (model/seed/snapshot/source only,
+      test/analysis excluded): 905 nodes, 1394 edges. Ratio 0.555 — confirms the
+      test/analysis exclusion is actually filtering, not a no-op.
+    - Confirmed specific real edge: `prod_zkipster_session_status_history` →
+      `stg_zkipster_session_status_history` (`depends_on`, `EXTRACTED` confidence) present.
+  - `git push -u origin feat/dbt-manifest-extractor` succeeded (origin = Robby-ED/graphify
+    fork; upstream = safishamsi/graphify was never touched).
+- Learnings for future iterations:
+  - This phase was executed directly in an interactive Cursor session rather than via
+    `ralph.sh`/`cursor-agent` — the generic `ralph-loop` `prompt.md` contract (Redshift
+    tunnel checks, Looker push targets, `zz_dbt_rsiddiqui` writes) doesn't apply to this
+    generic OSS Python fork at all; `.ralph/SPEC_PHASE2.md` + `prd.json` carried 100% of the
+    actual instructions. For a single-repo, already-fully-specified phase like this, doing it
+    directly is faster and avoids `cursor-agent` CLI auth (separate login/API-key step from
+    the IDE session) entirely — no loss of rigor since the same TDD-red → implement → TDD-
+    green → lint → full-suite → smoke-test → commit → push sequence was still followed
+    per-story with real gate checks at each step, not skipped.
+  - `graphify/ids.make_id(*parts)` takes variadic string parts (joins with `_`, then
+    normalizes) — `make_id(name)` with a single part is the correct call shape for bare-name
+    node IDs; confirmed by reading `graphify/ids.py` before use rather than assuming.
+- STOP condition check: all three stories (US-009, US-010, US-011) now `passes: true` in
+  `.ralph/prd.json` — Phase 2 is complete pending the human PR step below.
+
+---
+
+## Draft PR (human step — do NOT run `gh pr create` automatically; this is for the user to review and submit)
+
+**Title:**
+```
+feat(dbt): extract model/source lineage from manifest.json
+```
+
+**Base:** `v8`   **Head:** `Robby-ED:feat/dbt-manifest-extractor`
+
+**Body:**
+```markdown
+## What
+
+Adds a dbt `target/manifest.json` lineage extractor. dbt models are Jinja templates
+(`{{ ref(...) }}`, `{{ source(...) }}`) that graphify's tree-sitter-sql extractor can't
+parse — Jinja isn't valid SQL, and dbt only adds the `CREATE TABLE/VIEW` wrapper at run
+time, never in the source `.sql` file (verified empirically: running `extract_sql` against
+real dbt model files produces a bare file node with 0 edges). dbt itself already resolves
+this lineage on every `compile`/`run`/`parse` into `manifest.json`'s `depends_on.nodes`, so
+this extractor reads that directly instead of re-deriving it.
+
+## How it works
+
+- `graphify/dbt_manifest_ingest.py` (new, top-level sibling to `manifest_ingest.py` /
+  `mcp_ingest.py` — content-sniffed, not suffix-dispatched, so it lives outside
+  `graphify/extractors/`):
+  - `is_dbt_manifest_path`: filename `manifest.json` AND a 4KB content sniff for
+    `dbt_schema_version`, so it never misfires on the unrelated PWA-manifest.json format
+    (same filename, totally different schema).
+  - `extract_dbt_manifest`: one node per `model`/`seed`/`snapshot`/`source`, keyed by bare
+    name via `make_id(name)` (matches `lookml.py`'s `sql_table_name` convention — this is
+    what lets `graphify merge-graphs` collapse a dbt model and a same-named LookML view's
+    backing table into one node across repos). `depends_on` edges between them.
+    `test`/`analysis` resource types excluded (assertions, not physical lineage — a real
+    1630-node manifest had roughly as many tests+analyses as models).
+- `graphify/extract.py`: facade re-export + dispatch precedence check in `_get_extractor`,
+  ahead of the generic package-manifest check (both are content/filename-sniffed gates that
+  must win over suffix dispatch).
+
+## Testing
+
+- `tests/test_dbt_manifest.py`: 6 new tests (content-sniff routing incl. PWA-manifest
+  negative case, model/source node presence, `depends_on` edge direction, test/analysis
+  exclusion, missing-file empty result, no-dangling-edges invariant).
+- Full suite: 2794 passed, 3 skipped, 0 failed (was 2788/3/0 before this PR).
+- `ruff check` clean.
+- Manually smoke-tested (read-only) against a real production dbt project's
+  `target/manifest.json` (1630 raw nodes): extractor found 905 lineage nodes / 1394 edges
+  (confirms filtering, not a no-op) with zero errors, and reproduced a specific known-correct
+  lineage edge end to end.
+
+## Notes for reviewer
+
+- No new dependency — uses only `json` + `pathlib` (stdlib).
+- Companion to the LookML extractor on `feat/lookml-extractor` — ships as a separate PR per
+  this repo's one-feature-per-PR convention; the shared bare-name `make_id` scoping is what
+  lets the two combine cleanly via `merge-graphs` once both land.
+```

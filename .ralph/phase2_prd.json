@@ -1,0 +1,53 @@
+{
+  "project": "graphify (personal fork of safishamsi/graphify)",
+  "branchName": "feat/dbt-manifest-extractor",
+  "description": "Add a dbt manifest.json lineage extractor to graphify, reading dbt's already-resolved model/source dependency graph instead of trying to parse Jinja-templated .sql files. This branches independently off v8 (not off feat/lookml-extractor) to ship as a separate upstream PR, per this project's one-feature-per-PR convention. Full implementation spec, verified against a real production dbt project's manifest.json in a prior session, lives in .ralph/SPEC_PHASE2.md - read it before starting any story.",
+  "userStories": [
+    {
+      "id": "US-009",
+      "title": "dbt manifest extraction - failing tests (TDD red)",
+      "description": "As a developer, I want fixture-based tests for dbt manifest lineage extraction written before implementation, mirroring the existing tests/test_manifest_ingest.py convention exactly. Full test code is in .ralph/SPEC_PHASE2.md.",
+      "acceptanceCriteria": [
+        "Confirm you are on branch feat/dbt-manifest-extractor, branched from v8 (already created before this loop run - do not branch from feat/lookml-extractor).",
+        "Read tests/test_manifest_ingest.py first to see the tmp_path-synthetic-file convention this new test file must mirror.",
+        "Create tests/test_dbt_manifest.py exactly as specified in .ralph/SPEC_PHASE2.md (content-sniff routing test including the PWA-manifest.json negative case, model/source node test, depends_on edge test, test/analysis exclusion test, missing-file test, no-dangling-edges test).",
+        "`uv run pytest tests/test_dbt_manifest.py -q` fails with ImportError (extract_dbt_manifest and/or is_dbt_manifest_path do not exist yet) - this confirms the tests actually exercise not-yet-written code."
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Done locally (not via ralph-loop/cursor-agent). tests/test_dbt_manifest.py written verbatim from SPEC_PHASE2.md; confirmed red with ImportError before implementation existed."
+    },
+    {
+      "id": "US-010",
+      "title": "dbt manifest extraction - implementation (TDD green)",
+      "description": "As a developer, I want graphify/dbt_manifest_ingest.py implementing content-sniffed dbt manifest parsing exactly as specified, so US-009's tests pass.",
+      "acceptanceCriteria": [
+        "Create graphify/dbt_manifest_ingest.py with the full implementation from .ralph/SPEC_PHASE2.md, verbatim - it encodes verified design decisions (bare-name ID scoping matching the LookML extractor's convention, content-sniffing to avoid the PWA-manifest.json false positive, test/analysis exclusion). Do not redesign.",
+        "Add the facade re-export line to graphify/extract.py exactly as specified in .ralph/SPEC_PHASE2.md's Wiring section (needed for tests/test_dbt_manifest.py's `from graphify.extract import extract_dbt_manifest` import to succeed) - this can be done in this same story rather than deferred, since without it the tests cannot even import.",
+        "`uv run pytest tests/test_dbt_manifest.py -q` passes, 0 failures.",
+        "`uv run ruff check graphify/dbt_manifest_ingest.py graphify/extract.py` is clean.",
+        "Commit: feat(dbt): extract model/source lineage from manifest.json"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Done locally. graphify/dbt_manifest_ingest.py created verbatim from spec; facade re-export added to graphify/extract.py; tests/test_dbt_manifest.py green (6 passed); ruff clean on both files. Committed f172c89."
+    },
+    {
+      "id": "US-011",
+      "title": "Wire dispatch precedence + full verification + real-manifest smoke test + ready-for-PR",
+      "description": "As a developer, I want the dbt manifest extractor's dispatch precedence check placed ahead of the generic package-manifest check, and the full suite plus a real-world smoke test run before calling this done.",
+      "acceptanceCriteria": [
+        "Add the dispatch precedence check to graphify/extract.py exactly as specified in .ralph/SPEC_PHASE2.md's Wiring section, placed immediately before the existing is_package_manifest_path check. If this was already fully done in US-010, just confirm it here rather than re-doing it.",
+        "Do NOT modify graphify/detect.py, graphify/extractors/__init__.py, or pyproject.toml - this extractor needs no new optional dependency and is not suffix-dispatched (see SPEC_PHASE2.md for why).",
+        "`uv run pytest tests/ -q` passes with 0 failures. STOP condition: if any failure is outside the new dbt-manifest tests, do NOT modify pre-existing tests to force a pass - write it into this story's notes and stop instead.",
+        "`uv run ruff check graphify/ tests/` is clean.",
+        "Run the real-manifest smoke test described in .ralph/SPEC_PHASE2.md's final section against ~/Documents/GitHub/edna-dbt-talent-acquisition/target/manifest.json (read-only access to that repo only - never write/modify anything there). Confirm: no error key; the specific prod_zkipster_session_status_history -> stg_zkipster_session_status_history depends_on edge is present; node count is meaningfully less than the raw manifest's total node count (confirms test/analysis exclusion is actually filtering).",
+        "`git push -u origin feat/dbt-manifest-extractor` (push to origin/feat/dbt-manifest-extractor only - never push v8/master, never push to upstream).",
+        "Do NOT run gh pr create - write a draft PR title and body into progress.txt for the human to use, and stop there. Opening the actual PR is a human step."
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Done locally. Dispatch precedence wired in graphify/extract.py (commit 2626d5f). Full suite: 2794 passed, 3 skipped, 0 failed (baseline was 2788/3/0 - net +6 for the new tests). ruff clean on graphify/ and tests/. Real-manifest smoke test against ~/Documents/GitHub/edna-dbt-talent-acquisition/target/manifest.json (read-only): no error key; prod_zkipster_session_status_history -> stg_zkipster_session_status_history edge present; 905 extracted nodes vs 1630 raw nodes (0.555 ratio, confirms test/analysis exclusion filtering). Pushed to origin/feat/dbt-manifest-extractor. Did NOT run gh pr create per story instructions - draft PR title/body written to progress.txt."
+    }
+  ]
+}

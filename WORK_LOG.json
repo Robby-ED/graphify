@@ -1,0 +1,189 @@
+{
+  "title": "graphify: dbt + LookML lineage extractors — combined work log",
+  "generated_at": "2026-07-07T15:56:00Z",
+  "generated_by": "Cursor agent session, executed directly (no cursor-agent/ralph-loop CLI, no separate Cursor API key)",
+  "purpose": "Consolidated, human-readable summary of all work done extending graphify (https://github.com/safishamsi/graphify) to understand the full Zkipster data lifecycle: source dbt models -> compiled lineage -> LookML views/explores -> dashboards. Each phase shipped on its own feature branch (this repo's one-feature-per-PR convention); this branch merges both together purely for review visibility.",
+  "repo": {
+    "upstream": "https://github.com/safishamsi/graphify",
+    "fork": "https://github.com/Robby-ED/graphify",
+    "local_path": "~/graphify",
+    "base_branch": "v8",
+    "base_commit": "f4a7994",
+    "note": "Fork's origin/v8 (f4a7994) is currently behind upstream/v8 (53efaf8) by several releases. Not addressed here — out of scope for this work; flagged for awareness before any PR is eventually opened against upstream."
+  },
+  "combined_branch": {
+    "name": "summary/dbt-lookml-lineage-work",
+    "purpose": "Review/summary branch only — merges both phase branches so all work is visible in one place. NOT itself intended as a PR; the two phase branches below remain the actual PR-bound branches.",
+    "created_from": "v8 @ f4a7994",
+    "merge_commits": [
+      { "commit": "857a2b6", "message": "Merge branch 'feat/dbt-manifest-extractor' into summary/dbt-lookml-lineage-work", "conflicts": "none — the two phases touch disjoint line ranges of graphify/extract.py and otherwise disjoint files" }
+    ],
+    "pushed": true,
+    "remote": "origin/summary/dbt-lookml-lineage-work"
+  },
+  "verification_on_combined_branch": {
+    "full_test_suite": {
+      "command": "uv run pytest tests/ -q",
+      "result": "2807 passed, 3 skipped, 0 failed",
+      "baseline_before_either_phase": "2788 passed, 3 skipped, 0 failed",
+      "note": "2807 = 2788 baseline + 13 new LookML tests (Phase 1) + 6 new dbt-manifest tests (Phase 2); confirms both phases' tests coexist with zero regressions once merged together."
+    },
+    "lint": {
+      "command": "uv run ruff check graphify/ tests/",
+      "result": "All checks passed"
+    },
+    "smoke_tests_reverified_together": {
+      "phase_1_lookml_real_files": {
+        "source_repo": "~/edna-looker-talent-acquisition (read-only)",
+        "files": [
+          { "file": "views/Zkipster/prod_zkipster_session_status_history.view.lkml", "nodes": 45, "edges": 61 },
+          { "file": "views/Zkipster/zkipster_session_status_asof.view.lkml", "nodes": 59, "edges": 126 },
+          { "file": "models/ta_hiring_report.model.lkml", "nodes": 486, "edges": 497 },
+          { "file": "dashboards/hc_data/hiring_26_27/SY26-27/Operations/ops_funnel.dashboard.lookml", "nodes": 63, "edges": 86, "note": "hits the legacy-YAML fallback parser, not the brace/lkml path" }
+        ],
+        "totals": { "nodes": 653, "edges": 770 },
+        "errors": "none on any file"
+      },
+      "phase_2_dbt_manifest_real_file": {
+        "source_repo": "~/Documents/GitHub/edna-dbt-talent-acquisition/target/manifest.json (read-only)",
+        "is_dbt_manifest_path": true,
+        "error_key_present": false,
+        "extracted_nodes": 902,
+        "extracted_edges": 1397,
+        "note_on_drift": "Counts shifted slightly from the 905/1394 recorded during Phase 2's own verification 5 days earlier — the live dbt project's manifest.json changed in the interim (continued Zkipster model work). Not a regression: the specific traced lineage edge below still resolves correctly against the current manifest.",
+        "known_edge_still_present": {
+          "source_label": "prod_zkipster_session_status_history",
+          "target_label": "stg_zkipster_session_status_history",
+          "relation": "depends_on",
+          "confidence": "EXTRACTED"
+        }
+      }
+    }
+  },
+  "phases": [
+    {
+      "phase": 1,
+      "title": "LookML extractor",
+      "goal": "Parse .view.lkml / .model.lkml / .dashboard.lookml so graphify understands Looker views, explores/joins, and dashboard tiles.",
+      "branch": "feat/lookml-extractor",
+      "status": "complete, pushed, PR not yet opened (human step)",
+      "spec_doc": ".ralph/SPEC.md",
+      "prd_doc": ".ralph/prd.json",
+      "progress_doc": ".ralph/progress.txt",
+      "key_design_decisions": [
+        "Two incompatible LookML dashboard grammars exist in the wild: brace-syntax 'dashboards-next' (parsed by the lkml package) and legacy list-of-dicts YAML starting with '---' (parsed by PyYAML). Extractor tries lkml first, falls back to PyYAML, then gives up gracefully.",
+        "Worked around a real lkml package parser gap: 'sorts: [field asc|desc]' direction suffixes inside a plain list raise a SyntaxError. Stripped via regex (_strip_sort_directions) before parsing.",
+        "derived_table SQL bodies get a best-effort FROM/JOIN regex scan (INFERRED confidence) that explicitly excludes CTE names defined via WITH/AS in the same body, so a CTE alias is never mistaken for a physical table.",
+        "All nodes keyed by bare name via make_id — this is the convention Phase 2 also adopted, so a LookML view's sql_table_name and a same-named dbt model resolve to ONE node when graphs are combined with `graphify merge-graphs`."
+      ],
+      "files_changed": [
+        "graphify/extractors/lookml.py (new, 254 lines) — extract_lookml: views/dimensions/measures/extends/derived_table/sets, explores/joins, dashboard elements (both grammars)",
+        "graphify/extract.py — facade re-export + _DISPATCH entries for .lkml/.lookml",
+        "graphify/extractors/__init__.py — registered in LANGUAGE_EXTRACTORS",
+        "graphify/detect.py — .lkml/.lookml added to CODE_EXTENSIONS",
+        "pyproject.toml — new [lookml] optional extra (lkml, pyyaml), included in [all]",
+        "tests/test_languages.py (+112 lines, 13 new lookml tests)",
+        "tests/fixtures/sample.view.lkml, sample.model.lkml, sample.dashboard.lookml, sample_legacy.dashboard.lookml (new fixtures)"
+      ],
+      "commits": [
+        { "hash": "ba7adae", "message": "chore(ralph): US-001 confirm dev environment ready" },
+        { "hash": "1180ac7", "message": "test(lookml): US-002 view extraction fixture and failing tests (TDD red)" },
+        { "hash": "8ef5024", "message": "feat(lookml): view extraction (dimensions, measures, extends, derived_table, sets)" },
+        { "hash": "7d36a82", "message": "test(lookml): explore/join extraction, including implicit-self-view default" },
+        { "hash": "fb7c34a", "message": "test(lookml): dashboard brace-format extraction with sort-direction workaround" },
+        { "hash": "b05b1d2", "message": "test(lookml): dual-format dashboard extraction (brace + legacy YAML)" },
+        { "hash": "227ac3d", "message": "feat(lookml): wire extractor into dispatch, detection, and optional extras" },
+        { "hash": "d172314", "message": "chore(ralph): US-008 full verification + smoke test complete" }
+      ],
+      "user_stories": [
+        { "id": "US-001", "title": "Confirm dev environment is ready", "passes": true },
+        { "id": "US-002", "title": "View extraction - failing tests + fixture (TDD red)", "passes": true },
+        { "id": "US-003", "title": "View extraction - implementation (TDD green)", "passes": true },
+        { "id": "US-004", "title": "Explore/join extraction", "passes": true },
+        { "id": "US-005", "title": "Dashboard extraction - brace (dashboards-next) format", "passes": true },
+        { "id": "US-006", "title": "Dashboard extraction - legacy YAML format", "passes": true },
+        { "id": "US-007", "title": "Wire dispatch", "passes": true },
+        { "id": "US-008", "title": "Full verification + real-file smoke test + ready-for-PR", "passes": true }
+      ],
+      "verification_at_time_of_phase": {
+        "full_suite": "2801 passed, 3 skipped, 0 failed",
+        "ruff": "clean",
+        "smoke_test": "4/4 real LookML files in edna-looker-talent-acquisition extracted with nonzero nodes/edges, no errors"
+      },
+      "pushed_to": "origin/feat/lookml-extractor",
+      "pull_request": {
+        "opened": false,
+        "reason_not_opened": "gh pr create is an explicit human step per this repo's convention and this project's .cursor/permissions.json deny-list — never automated.",
+        "draft_title": "feat(lookml): add LookML extractor for views, explores, and dashboards",
+        "draft_body_location": ".ralph/progress.txt (bottom section)",
+        "compare_url": "https://github.com/Robby-ED/graphify/compare/v8...feat/lookml-extractor",
+        "create_url": "https://github.com/Robby-ED/graphify/pull/new/feat/lookml-extractor"
+      }
+    },
+    {
+      "phase": 2,
+      "title": "dbt manifest.json lineage extractor",
+      "goal": "Read dbt's already-resolved ref()/source() lineage from target/manifest.json, since dbt models are Jinja templates that graphify's tree-sitter-sql extractor cannot parse (verified empirically: extract_sql on real dbt .sql model files produces 1 node / 0 edges — Jinja isn't valid SQL, and dbt only adds the CREATE TABLE/VIEW wrapper at run time).",
+      "branch": "feat/dbt-manifest-extractor",
+      "status": "complete, pushed, PR not yet opened (human step)",
+      "spec_doc": ".ralph/SPEC_PHASE2.md",
+      "prd_doc": ".ralph/phase2_prd.json",
+      "progress_doc": ".ralph/phase2_progress.txt",
+      "key_design_decisions": [
+        "Recognized by CONTENT, not filename alone: manifest.json is also the standard PWA/web-app-manifest filename. Detection reads only the first 4KB and sniffs for the dbt_schema_version marker key — never loads the whole (potentially 10MB+) file just to check.",
+        "Lives as a top-level graphify/*.py sibling to manifest_ingest.py / mcp_ingest.py, NOT under graphify/extractors/ — that directory is for suffix-dispatched per-language extractors only; this one is content-sniffed and checked earlier in _get_extractor.",
+        "Nodes keyed by bare name via make_id(name), matching Phase 1's lookml.py convention exactly — this is what lets `graphify merge-graphs` collapse a dbt model and a LookML view's backing table into one node across repos with no special-cased cross-extractor edge type.",
+        "test and analysis resource types excluded deliberately — assertions/ad-hoc queries, not physical data lineage. Verified against a real 1600+-node manifest: excluding them roughly halves the extracted node count vs. the raw manifest."
+      ],
+      "files_changed": [
+        "graphify/dbt_manifest_ingest.py (new, 116 lines) — is_dbt_manifest_path, extract_dbt_manifest",
+        "graphify/extract.py — facade re-export + dispatch precedence check in _get_extractor, ahead of is_package_manifest_path",
+        "tests/test_dbt_manifest.py (new, 96 lines, 6 tests)"
+      ],
+      "commits": [
+        { "hash": "f172c89", "message": "feat(dbt): extract model/source lineage from manifest.json" },
+        { "hash": "2626d5f", "message": "feat(dbt): route manifest.json through dispatch precedence" }
+      ],
+      "user_stories": [
+        { "id": "US-009", "title": "dbt manifest extraction - failing tests (TDD red)", "passes": true },
+        { "id": "US-010", "title": "dbt manifest extraction - implementation (TDD green)", "passes": true },
+        { "id": "US-011", "title": "Wire dispatch precedence + full verification + real-manifest smoke test + ready-for-PR", "passes": true }
+      ],
+      "verification_at_time_of_phase": {
+        "full_suite": "2794 passed, 3 skipped, 0 failed",
+        "ruff": "clean",
+        "smoke_test": "against ~/Documents/GitHub/edna-dbt-talent-acquisition/target/manifest.json (read-only): no error key; 905 extracted nodes vs 1630 raw manifest nodes (0.555 ratio, confirms test/analysis exclusion is filtering); specific known-correct depends_on edge (prod_zkipster_session_status_history -> stg_zkipster_session_status_history) reproduced"
+      },
+      "executed_how": "Implemented directly in an interactive Cursor session rather than via ralph.sh/cursor-agent — avoided the separate cursor-agent CLI login/API-key step entirely. Same TDD-red -> implement -> TDD-green -> lint -> full-suite -> smoke-test -> commit -> push sequence still followed per-story with real gate checks at each step, not skipped.",
+      "pushed_to": "origin/feat/dbt-manifest-extractor",
+      "pull_request": {
+        "opened": false,
+        "reason_not_opened": "gh pr create is an explicit human step per this repo's convention and this project's .cursor/permissions.json deny-list — never automated.",
+        "draft_title": "feat(dbt): extract model/source lineage from manifest.json",
+        "draft_body_location": ".ralph/phase2_progress.txt (bottom section)",
+        "compare_url": "https://github.com/Robby-ED/graphify/compare/v8...feat/dbt-manifest-extractor",
+        "create_url": "https://github.com/Robby-ED/graphify/pull/new/feat/dbt-manifest-extractor"
+      }
+    },
+    {
+      "phase": 3,
+      "title": "dbt SQL-body parsing (compiled model bodies, not just inter-model lineage)",
+      "goal": "Phase 2 only gives model-to-model/source depends_on edges from manifest.json's metadata — it does not parse the actual SQL body of a dbt model (which fields it selects, which CTEs it defines, etc.), because graphify's tree-sitter-sql extractor can't parse the raw Jinja-templated .sql source.",
+      "status": "scoped conceptually, not started",
+      "proposed_approach": [
+        "Run `dbt compile` (not `dbt parse`) so target/manifest.json's compiled_code field is populated with fully Jinja-resolved SQL for every model.",
+        "For each model, wrap compiled_code in a synthetic 'CREATE VIEW <model_name> AS <compiled_sql>' shadow file, since graphify's existing extract_sql only activates on top-level CREATE TABLE/VIEW/etc. statements, never bare SELECT.",
+        "Feed the shadow files to graphify's existing extract_sql — no new graphify code needed for this phase, just a pre-processing script in the dbt repo (or a wrapper invoked before `graphify path/to/shadow_dir`)."
+      ],
+      "blocking_open_item": "A prior attempt to test the CREATE VIEW-wrapping approach was blocked by this environment's own tool-safety filter (flagged for containing literal 'CREATE VIEW' text in a test command) — never actually verified end-to-end. First task of this phase must be confirming the wrap-and-parse approach actually produces useful nodes/edges on a real compiled model before building any tooling around it.",
+      "verified_at_time_of_phase": "not applicable — no implementation yet"
+    }
+  ],
+  "next_steps": [
+    "Human decision: open PR for feat/lookml-extractor (draft ready in .ralph/progress.txt) — https://github.com/Robby-ED/graphify/pull/new/feat/lookml-extractor",
+    "Human decision: open PR for feat/dbt-manifest-extractor (draft ready in .ralph/phase2_progress.txt) — https://github.com/Robby-ED/graphify/pull/new/feat/dbt-manifest-extractor",
+    "Optional: sync fork's v8 with upstream/v8 (currently several releases behind) before either PR, to minimize merge drift against safishamsi/graphify",
+    "Phase 3 (SQL-body parsing via dbt compile + shadow CREATE VIEW files) — verify the wrap-and-parse approach on one real model before committing to the design",
+    "Longer-term: once both PRs land upstream (or are merged locally), run `graphify merge-graphs` across the dbt repo's manifest.json output and the Looker repo's LookML output to produce the actual combined source-to-dashboard lineage graph for Zkipster — this was the original motivating use case for both phases"
+  ]
+}
