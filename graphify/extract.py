@@ -14,6 +14,7 @@ from typing import Any, Callable
 from .cache import load_cached, save_cached
 from .mcp_ingest import extract_mcp_config, is_mcp_config_path
 from .manifest_ingest import extract_package_manifest, is_package_manifest_path
+from .dbt_manifest_ingest import extract_dbt_manifest, is_dbt_manifest_path  # noqa: F401
 from .resolver_registry import (
     LanguageResolver,
     register as register_language_resolver,
@@ -15147,6 +15148,12 @@ def _get_extractor(path: Path) -> Any | None:
     # (servers, commands, packages, env vars) instead of opaque JSON keys.
     if is_mcp_config_path(path):
         return extract_mcp_config
+    # dbt's target/manifest.json holds already-resolved ref()/source() lineage;
+    # checked ahead of the generic package-manifest check purely for ordering
+    # clarity (both are content/filename-sniffed gates that must win over
+    # suffix dispatch; there's no actual name collision between the two checks).
+    if is_dbt_manifest_path(path):
+        return extract_dbt_manifest
     # Package manifests (apm.yml, pyproject.toml, go.mod, pom.xml) → a canonical
     # package node + depends_on edges, by filename before generic suffix dispatch
     # (#1377). apm.yml would otherwise be a .yml document handled by the LLM.
